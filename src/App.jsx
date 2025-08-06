@@ -8,6 +8,7 @@ const BACKEND_URL = "https://bank-dashboard-backend-hmux.onrender.com";
 const App = () => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [linkToken, setLinkToken] = useState(null);
 
   const fetchTransactions = async () => {
     setLoading(true);
@@ -49,14 +50,61 @@ const App = () => {
     a.click();
   };
 
+  const createLinkToken = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/create_link_token`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      setLinkToken(data.link_token);
+      return data.link_token;
+    } catch (err) {
+      console.error("Failed to create link token:", err);
+    }
+  };
+
+  const openPlaidLink = async () => {
+    const token = await createLinkToken();
+
+    if (!token) return;
+
+    const handler = window.Plaid.create({
+      token,
+      onSuccess: async (public_token) => {
+        await fetch(`${BACKEND_URL}/api/exchange_public_token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ public_token }),
+        });
+
+        fetchTransactions();
+      },
+      onExit: (err) => {
+        if (err) console.error("Plaid exited with error:", err);
+      },
+    });
+
+    handler.open();
+  };
+
   useEffect(() => {
     fetchTransactions();
   }, []);
 
+  const groupedTransactions = transactions.reduce((groups, tx) => {
+    const account = tx.account_name || "Unknown Account";
+    if (!groups[account]) groups[account] = [];
+    groups[account].push(tx);
+    return groups;
+  }, {});
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">Bank Dashboard</h1>
-      <Button onClick={handleDownload} className="mb-4">Download CSV</Button>
+      <div className="mb-4 flex gap-2">
+        <Button onClick={handleDownload}>Download CSV</Button>
+        <Button onClick={openPlaidLink}>Connect Another Bank</Button>
+      </div>
       <Card>
         <CardContent>
           {loading ? (
@@ -64,26 +112,31 @@ const App = () => {
           ) : transactions?.length === 0 ? (
             <p>No transactions available.</p>
           ) : (
-            <table className="w-full text-left">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Name</th>
-                  <th>Amount</th>
-                  <th>Category</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((tx, i) => (
-                  <tr key={i} className="border-t">
-                    <td>{tx.date}</td>
-                    <td>{tx.name}</td>
-                    <td>${tx.amount.toFixed(2)}</td>
-                    <td>{(tx.category || []).join(" / ")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            Object.entries(groupedTransactions).map(([accountName, txList]) => (
+              <div key={accountName} className="mb-8">
+                <h2 className="text-xl font-semibold mb-2">{accountName}</h2>
+                <table className="w-full text-left">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Name</th>
+                      <th>Amount</th>
+                      <th>Category</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {txList.map((tx, i) => (
+                      <tr key={i} className="border-t">
+                        <td>{tx.date}</td>
+                        <td>{tx.name}</td>
+                        <td>${tx.amount.toFixed(2)}</td>
+                        <td>{(tx.category || []).join(" / ")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))
           )}
         </CardContent>
       </Card>
