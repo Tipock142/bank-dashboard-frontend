@@ -38,7 +38,7 @@ const App = () => {
 
   const handleDownload = () => {
     const headers = ["Date", "Name", "Amount", "Category"];
-    const rows = transactions.map(tx => [tx.date, tx.name, tx.amount, tx.category.join("/")]);
+    const rows = transactions.map(tx => [tx.date, tx.name, tx.amount, (tx.category || []).join("/")]);
     const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -79,7 +79,7 @@ const App = () => {
                     <td>{tx.date}</td>
                     <td>{tx.name}</td>
                     <td>${tx.amount.toFixed(2)}</td>
-                    <td>{tx.category.join(" / ")}</td>
+                    <td>{(tx.category || []).join(" / ")}</td>
                   </tr>
                 ))}
               </tbody>
